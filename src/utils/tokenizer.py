@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from torchvision.models import resnet50, ResNet50_Weights
+import numpy as np
 
 class Tokenizer(nn.Module):
     def __init__(self,
@@ -41,6 +42,9 @@ class Tokenizer(nn.Module):
         return self.forward(torch.zeros((1, n_channels, height, width))).shape[1]
 
     def forward(self, x):
+        # print(self.conv_layers(x).shape)
+        # print(self.flattener(self.conv_layers(x)).shape)
+        # print(self.flattener(self.conv_layers(x)).transpose(-2, -1).shape)
         return self.flattener(self.conv_layers(x)).transpose(-2, -1)
 
     @staticmethod
@@ -48,64 +52,30 @@ class Tokenizer(nn.Module):
         if isinstance(m, nn.Conv2d):
             nn.init.kaiming_normal_(m.weight)
 
+class VideoTokenizer(nn.Module):
+    def __init__(self):
+        super(VideoTokenizer, self).__init__()
 
-class TextTokenizer(nn.Module):
-    def __init__(self,
-                 kernel_size, stride, padding,
-                 pooling_kernel_size=3, pooling_stride=2, pooling_padding=1,
-                 embedding_dim=300,
-                 n_output_channels=128,
-                 activation=None,
-                 max_pool=True,
-                 *args, **kwargs):
-        super(TextTokenizer, self).__init__()
+        resnet_model = resnet50(weights=ResNet50_Weights.DEFAULT)
 
-        self.max_pool = max_pool
-        self.conv_layers = nn.Sequential(
-            nn.Conv2d(1, n_output_channels,
-                      kernel_size=(kernel_size, embedding_dim),
-                      stride=(stride, 1),
-                      padding=(padding, 0), bias=False),
-            nn.Identity() if activation is None else activation(),
-            nn.MaxPool2d(
-                kernel_size=(pooling_kernel_size, 1),
-                stride=(pooling_stride, 1),
-                padding=(pooling_padding, 0)
-            ) if max_pool else nn.Identity()
-        )
+        self.resnet_featurize = nn.Sequential(*list(resnet_model.children())[:-1])
 
-        self.apply(self.init_weight)
+        self.flattener = nn.Flatten(1, -1)
 
-    def seq_len(self, seq_len=32, embed_dim=300):
-        return self.forward(torch.zeros((1, seq_len, embed_dim)))[0].shape[1]
+        self.linear = nn.Linear(2048, 512)
 
-    def forward_mask(self, mask):
-        new_mask = mask.unsqueeze(1).float()
-        cnn_weight = torch.ones(
-            (1, 1, self.conv_layers[0].kernel_size[0]),
-            device=mask.device,
-            dtype=torch.float)
-        new_mask = F.conv1d(
-            new_mask, cnn_weight, None,
-            self.conv_layers[0].stride[0], self.conv_layers[0].padding[0], 1, 1)
-        if self.max_pool:
-            new_mask = F.max_pool1d(
-                new_mask, self.conv_layers[2].kernel_size[0],
-                self.conv_layers[2].stride[0], self.conv_layers[2].padding[0], 1, False, False)
-        new_mask = new_mask.squeeze(1)
-        new_mask = (new_mask > 0)
-        return new_mask
+    def sequence_length(self, video_len=3, n_channels=3, height=224, width=224):
+        return self.forward(torch.zeros((1, video_len, n_channels, height, width))).shape[1]
 
-    def forward(self, x, mask=None):
-        x = x.unsqueeze(1)
-        x = self.conv_layers(x)
-        x = x.transpose(1, 3).squeeze(1)
-        if mask is not None:
-            mask = self.forward_mask(mask).unsqueeze(-1).float()
-            x = x * mask
-        return x, mask
+    def forward(self, x):
+        
+        ft = self.resnet_featurize(x[0])
+        flat_fts = self.flattener(ft)
+        a = self.linear(flat_fts).unsqueeze(0)
+  
+        for vid in x[1:]:
+            ft = self.resnet_featurize(vid)
+            flat_fts = self.flattener(ft)
+            a = torch.cat((a, self.linear(flat_fts).unsqueeze(0)), axis = 0)
 
-    @staticmethod
-    def init_weight(m):
-        if isinstance(m, nn.Conv2d):
-            nn.init.kaiming_normal_(m.weight)
+        return a
