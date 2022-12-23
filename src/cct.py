@@ -32,7 +32,7 @@ class CCT(nn.Module):
             positional_embedding=positional_embedding
         )
         # Added by Shubham for binary classifier
-        self.fc_sigmoid = nn.Sequential(nn.Linear(num_classes, 1), nn.Sigmoid())
+        self.fc_sigmoid = nn.Sequential(nn.Linear(num_classes, 1))
 
     def forward(self, x):
         x = self.tokenizer(x)
