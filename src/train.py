@@ -78,7 +78,7 @@ def main():
     dataloader = DataLoader(OCTVideos(), batch_size=2, shuffle=True)
 
     learning_rate = 0.005
-    cross_entropy = nn.BCELoss()
+    cross_entropy = nn.BCEWithLogitsLoss()
     sgd_optimizer = optim.SGD(model.parameters(), lr=learning_rate)
 
     train(model, 25, cross_entropy, sgd_optimizer, 'O-CCT_mark0', dataloader, device)
