@@ -64,7 +64,7 @@ class VideoTokenizer(nn.Module):
 
         self.linear = nn.Linear(2048, 512)
 
-    def sequence_length(self, video_len=3, n_channels=3, height=224, width=224):
+    def sequence_length(self, video_len=50, n_channels=3, height=224, width=224):
         return self.forward(torch.zeros((1, video_len, n_channels, height, width))).shape[1]
 
     def forward(self, x):

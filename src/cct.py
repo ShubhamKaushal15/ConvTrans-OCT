@@ -1,6 +1,6 @@
 import torch.nn as nn
-from .utils.transformers import TransformerClassifier
-from .utils.tokenizer import VideoTokenizer
+from utils.transformers import TransformerClassifier
+from utils.tokenizer import VideoTokenizer
 
 class CCT(nn.Module):
     def __init__(self,
@@ -31,7 +31,10 @@ class CCT(nn.Module):
             num_classes=num_classes,
             positional_embedding=positional_embedding
         )
+        # Added by Shubham for binary classifier
+        self.fc_sigmoid = nn.Sequential(nn.Linear(num_classes, 1), nn.Sigmoid())
 
     def forward(self, x):
         x = self.tokenizer(x)
-        return self.classifier(x)
+        x = self.classifier(x)
+        return self.fc_sigmoid(x)
